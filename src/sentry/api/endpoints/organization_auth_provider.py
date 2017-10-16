@@ -8,8 +8,6 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 
 from sentry import features, roles
-from sentry.auth import manager
-from sentry.auth.helper import AuthHelper
 from sentry.api.bases.organization import OrganizationEndpoint, OrganizationAuthProviderPermission
 from sentry.api.exceptions import ResourceDoesNotExist
 from sentry.api.serializers import serialize
@@ -84,48 +82,6 @@ class OrganizationAuthProviderEndpoint(OrganizationEndpoint):
         }
 
         return Response(serialize(context, request.user))
-
-    def post(self, request, organization):
-        """
-        Start Auth Provider flow
-        ````````````````````````
-
-        :pparam string organization_slug: the organization short name
-        :param string provider: the auth provider name
-        :param boolean init: specifies if we should start pipeline
-        :auth: required
-        """
-        if not features.has('organizations:sso', organization, actor=request.user):
-            return Response(ERR_NO_SSO, status=status.HTTP_403_FORBIDDEN)
-
-        provider_key = request.DATA.get('provider')
-        init = request.DATA.get('init')
-
-        if not manager.exists(provider_key):
-            return Response({'message': 'Provider not found: {}'.format(
-                provider_key)}, status=status.HTTP_404_NOT_FOUND)
-
-        # Return auth url or template
-        helper = AuthHelper(
-            request=request,
-            organization=organization,
-            provider_key=provider_key,
-            flow=AuthHelper.FLOW_SETUP_PROVIDER,
-        )
-
-        if init:
-            helper.init_pipeline()
-
-        resp = helper.current_step()
-
-        # TODO this seems gross, clean this up in AuthHelper maybe?
-        if resp.status_code == 302:
-            return Response({'auth_url': resp.get('Location')}, status=status.HTTP_200_OK)
-        elif resp.status_code == 200:
-            return Response({'template': resp.content.decode('utf-8')})
-
-        # Not sure if we should just return this?
-        return resp
 
     def put(self, request, organization):
         """
